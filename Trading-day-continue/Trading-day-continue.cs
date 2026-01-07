@@ -1,8 +1,8 @@
 ﻿using cAlgo.API;
-using cAlgo.API.Collections;
-using cAlgo.API.Indicators;
 using cAlgo.API.Internals;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -14,7 +14,9 @@ namespace cAlgo.Robots
     public class Tradingdaycontinue : Robot
     {
       [Parameter("Trade enable", DefaultValue = true, Group = "Trade")]
-      public bool IsEnable { get; set; }
+      public bool IsTradeEnable { get; set; }
+      [Parameter("Day to stop", DefaultValue = 1, Group = "Trade")]
+      public int DayToStop { get; set; }
       [Parameter("ChatId", Group = "Telegram Settings")]
       public string ChatId { get; set; }
 
@@ -26,7 +28,8 @@ namespace cAlgo.Robots
       private TextBlock _accountInfosText;
 
     protected override void OnStart()
-      {
+    {
+      //System.Diagnostics.Debugger.Launch();
         if (!IsBacktesting && !string.IsNullOrEmpty(Token) && !string.IsNullOrEmpty(ChatId))
           telegram = new Telegram(token: Token, chatId: long.Parse(ChatId));
         else
@@ -35,18 +38,73 @@ namespace cAlgo.Robots
         SendBotInformation();
         SendHistoricalTrades(3);
 
-
+        CreateAccountInfosPanel();
+        UpdateAccountInfosPanel();
     }
 
     protected override void OnTick()
+    {
+      UpdateAccountInfosPanel();
+    }
+
+    protected override void OnBar()
+    {
+      var germanyTimeNow = GetGermanyTimeNow();
+      if (germanyTimeNow.Hour == 10 && germanyTimeNow.Minute == 0)
       {
-          // Handle price updates here
+        if (IsTradeEnable && CountTradedOfCurrentDay() == 0)
+        {
+          Random random = new Random();
+          int value = random.Next(0, 2);
+          if (value == 0)
+          {
+            ExecuteMarketOrder(
+              TradeType.Buy,
+              SymbolName,
+              Symbol.NormalizeVolumeInUnits(0.01, RoundingMode.Down),
+              "BUY",
+              20,
+              20);
+          }
+          else if (value == 1)
+          {
+            ExecuteMarketOrder(
+              TradeType.Sell,
+              SymbolName,
+              Symbol.NormalizeVolumeInUnits(0.01, RoundingMode.Down),
+              "Sell",
+              20,
+              20);
+          }
+
+          if(!GetAllOpenedPositions().Any())
+            SendNoTradeWarning();
+        }
       }
 
-      protected override void OnStop()
-      {
-          // Handle cBot stop here
-      }
+      if (germanyTimeNow.Hour == 12 && germanyTimeNow.Minute == 0)
+        SendNoTradeWarning();
+
+      if (germanyTimeNow.Hour == 15 && germanyTimeNow.Minute == 0)
+        SendNoTradeWarning();
+
+      if (germanyTimeNow.Hour == 17 && germanyTimeNow.Minute == 0)
+        SendNoTradeWarning();
+
+      if (germanyTimeNow.Hour == 20 && germanyTimeNow.Minute == 0)
+        SendNoTradeWarning();
+    }
+
+    private void SendNoTradeWarning()
+    {
+      if (CountTradedOfCurrentDay() == 0)
+        telegram.SendMessage(message: "There’s still no trade today. Place one! ", isBacktesting: IsBacktesting);
+    }
+
+    protected override void OnStop()
+    {
+        // Handle cBot stop here
+    }
     private void CreateAccountInfosPanel()
     {
       _accountInfosText = new TextBlock
@@ -154,7 +212,7 @@ namespace cAlgo.Robots
     {
       var info = new StringBuilder();
 
-      info.AppendLine($@"🤖 Pivot Point Bot {GetInstanceId()} ");
+      info.AppendLine($@"🤖 Trading day continue Bot {GetInstanceId()} ");
       info.AppendLine($"📈 Symbol: {SymbolName}");
       info.AppendLine($"🏦 Account: {Account.Number} ({Account.Asset.Name}) - {Account.BrokerName}");
       info.AppendLine($"💰 Balance: {Account.Balance}");
@@ -168,23 +226,21 @@ namespace cAlgo.Robots
 
       return match.Success ? match.Value : InstanceId;
     }
-    private void OnBuyClicked(ButtonClickEventArgs obj)
+
+    private DateTime GetGermanyTimeNow() =>
+      TimeZoneInfo.ConvertTimeFromUtc(dateTime: Server.Time,
+                                    destinationTimeZone: TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time"));
+    private int CountTradedOfCurrentDay()
     {
-      ExecuteMarketOrder(
-          TradeType.Buy,
-          SymbolName,
-          1.1,
-          "BUY_BUTTON");
+      var from = Server.Time;
+
+      var recentTrades = History.Where(t => DateTime.Compare(t.ClosingTime.Date, from.Date) == 0).ToList();
+      return recentTrades.Count;
     }
 
-    private void OnSellClicked(ButtonClickEventArgs obj)
+    private List<Position> GetAllOpenedPositions()
     {
-
-      ExecuteMarketOrder(
-          TradeType.Sell,
-          SymbolName,
-          1.1,
-          "SELL_BUTTON");
+      return Positions.Where(pos => string.Equals(a: pos.Symbol.Name, b: SymbolName)).ToList();
     }
   }
 }
