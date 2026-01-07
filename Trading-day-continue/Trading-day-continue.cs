@@ -55,8 +55,12 @@ namespace cAlgo.Robots
       if (Server.Time.Date.CompareTo(_currentDay) > 0)
       {
         _currentDay = Server.Time.Date;
-        _dayCount++; 
-        if(_dayCount > DayToStop)
+        _dayCount++;
+        var updateDayMsg = $"Day to stop: {DayToStop}\n" +
+                            $"Completed day: {_dayCount}\n\n";
+        telegram.SendMessage(message: updateDayMsg, isBacktesting: IsBacktesting);
+
+        if (_dayCount > DayToStop)
         {
           telegram.SendMessage(message: $"The bot has been running successfully for {_dayCount} days.", isBacktesting: IsBacktesting);
           Stop();
