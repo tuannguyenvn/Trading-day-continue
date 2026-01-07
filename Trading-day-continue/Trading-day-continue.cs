@@ -26,12 +26,15 @@ namespace cAlgo.Robots
       private Telegram telegram;
       private Border _accountInfosPanel;
       private TextBlock _accountInfosText;
+      private int _dayCount;
+      DateTime _currentDay;
 
     protected override void OnStart()
     {
       //System.Diagnostics.Debugger.Launch();
+        _currentDay = Server.Time.Date;
         if (!IsBacktesting && !string.IsNullOrEmpty(Token) && !string.IsNullOrEmpty(ChatId))
-          telegram = new Telegram(token: Token, chatId: long.Parse(ChatId));
+            telegram = new Telegram(token: Token, chatId: long.Parse(ChatId));
         else
           telegram = new Telegram();
 
@@ -49,6 +52,16 @@ namespace cAlgo.Robots
 
     protected override void OnBar()
     {
+      if (Server.Time.Date.CompareTo(_currentDay) > 0)
+      {
+        _dayCount++; 
+        if(_dayCount > DayToStop)
+        {
+          telegram.SendMessage(message: $"The bot has been running successfully for {_dayCount} days.", isBacktesting: IsBacktesting);
+          Stop();
+        }
+      }
+
       var germanyTimeNow = GetGermanyTimeNow();
       if (germanyTimeNow.Hour == 10 && germanyTimeNow.Minute == 0)
       {
@@ -103,7 +116,7 @@ namespace cAlgo.Robots
 
     protected override void OnStop()
     {
-        // Handle cBot stop here
+      telegram.SendMessage(message: "🔴 bot is stopped \n" + DateTime.Now, isBacktesting: IsBacktesting);
     }
     private void CreateAccountInfosPanel()
     {
@@ -142,29 +155,12 @@ namespace cAlgo.Robots
       double winRate = totalTrades > 0 ? (double)wins / totalTrades * 100 : 0;
 
 
-      double balance = Account.Balance;
-
-      double risk05 = Math.Round(balance * 0.005, 0);
-      double risk1 = Math.Round(balance * 0.01, 0);
-      double risk2 = Math.Round(balance * 0.02, 0);
-      double risk04 = Math.Round(balance * 0.004, 0);
-      double risk08 = Math.Round(balance * 0.008, 0);
-      double risk16 = Math.Round(balance * 0.016, 0);
-
-      var equity = Account.Equity;
-      var targetBalance = 0.0;
-      var targetReachedText = "";
-
 
       _accountInfosText.Text =
           $"{Account.BrokerName} - {Account.Number} ({SymbolName})\n" +
           $"Chat name: {telegram.chatName}\n\n" +
-          $"Target: {targetBalance}\n" +
-          $"Equity: {equity} {targetReachedText}\n\n" +
-          $"Balance: {Account.Balance}\n" +
-          $"0.5% Risk : {risk05}      " + $"0.4% Risk : {risk04}\n" +
-          $"1.0% Risk : {risk1}       " + $"0.8% Risk : {risk08}\n" +
-          $"2.0% Risk : {risk2}       " + $"1.6% Risk : {risk16}\n\n" +
+          $"Day to stop: {DayToStop}\n" +
+          $"Completed day: {_dayCount}\n\n" +
           $"Total : {totalTrades}\n" +
           $"Winning : {wins}          " + $"Win Rate : {winRate:F2}%\n" +
           $"Losing : {losses}         " + $"Net Profit : {netProfit:F2}";
