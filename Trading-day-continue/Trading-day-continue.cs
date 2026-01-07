@@ -54,6 +54,7 @@ namespace cAlgo.Robots
     {
       if (Server.Time.Date.CompareTo(_currentDay) > 0)
       {
+        _currentDay = Server.Time.Date;
         _dayCount++; 
         if(_dayCount > DayToStop)
         {
